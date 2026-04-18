@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Snake</title>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #1a1a2e;
+      font-family: 'Press Start 2P', 'Courier New', monospace;
+      color: #eee;
+    }
+
+    .container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+    }
+
+    h1 {
+      font-size: 2rem;
+      letter-spacing: 6px;
+      color: #e94560;
+      text-shadow: 0 0 16px #e9456088;
+    }
+
+    .hud {
+      display: flex;
+      gap: 2.5rem;
+      font-size: 0.6rem;
+      color: #a8dadc;
+      letter-spacing: 2px;
+    }
+
+    .hud span { color: #e94560; }
+
+    canvas {
+      display: block;
+      border: 2px solid #0f3460;
+      box-shadow: 0 0 24px #0f346088, 0 0 2px #e9456044;
+      image-rendering: pixelated;
+    }
+
+    .hint {
+      font-size: 0.45rem;
+      color: #444;
+      letter-spacing: 2px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>SNAKE</h1>
+    <div class="hud">
+      SCORE: <span id="score">0</span>&nbsp;&nbsp;&nbsp;&nbsp;HI: <span id="hi">0</span>
+    </div>
+    <canvas id="c" width="400" height="400"></canvas>
+    <div class="hint">WASD / ARROW KEYS &nbsp;|&nbsp; ANY KEY TO START</div>
+  </div>
+
+  <script>
+    const COLS = 20, ROWS = 20, CELL = 20;
+    const canvas = document.getElementById('c');
+    const ctx = canvas.getContext('2d');
+
+    let snake, dir, nextDir, food, score, grow, gameLoop, state, tick, foodBlink;
+    let hiScore = parseInt(localStorage.getItem('snake_hi') || '0');
+
+    const DIRS = {
+      ArrowUp:    {x:0,y:-1}, w:{x:0,y:-1},
+      ArrowDown:  {x:0,y:1},  s:{x:0,y:1},
+      ArrowLeft:  {x:-1,y:0}, a:{x:-1,y:0},
+      ArrowRight: {x:1,y:0},  d:{x:1,y:0},
+    };
+
+    function init() {
+      snake = [{x:10,y:10},{x:9,y:10},{x:8,y:10}];
+      dir    = {x:1, y:0};
+      nextDir= {x:1, y:0};
+      grow   = 0;
+      score  = 0;
+      tick   = 150;
+      foodBlink = 0;
+      spawnFood();
+      updateHUD();
+      state = 'idle';
+      draw();
+    }
+
+    function spawnFood() {
+      let pos;
+      do {
+        pos = { x: Math.floor(Math.random()*COLS), y: Math.floor(Math.random()*ROWS) };
+      } while (snake.some(s => s.x === pos.x && s.y === pos.y));
+      food = pos;
+    }
+
+    function start() {
+      if (gameLoop) clearInterval(gameLoop);
+      state = 'playing';
+      gameLoop = setInterval(step, tick);
+    }
+
+    function step() {
+      foodBlink++;
+      dir = nextDir;
+      const head = { x: snake[0].x + dir.x, y: snake[0].y + dir.y };
+
+      if (head.x < 0 || head.x >= COLS || head.y < 0 || head.y >= ROWS ||
+          snake.some(s => s.x === head.x && s.y === head.y)) {
+        gameOver();
+        return;
+      }
+
+      snake.unshift(head);
+      if (head.x === food.x && head.y === food.y) {
+        score++;
+        if (score > hiScore) { hiScore = score; localStorage.setItem('snake_hi', hiScore); }
+        updateHUD();
+        spawnFood();
+        if (score % 5 === 0 && tick > 60) {
+          tick = Math.max(60, tick - 5);
+          clearInterval(gameLoop);
+          gameLoop = setInterval(step, tick);
+        }
+      } else {
+        snake.pop();
+      }
+      draw();
+    }
+
+    function gameOver() {
+      clearInterval(gameLoop);
+      gameLoop = null;
+      state = 'dead';
+      draw();
+    }
+
+    function updateHUD() {
+      document.getElementById('score').textContent = score;
+      document.getElementById('hi').textContent = hiScore;
+    }
+
+    function draw() {
+      ctx.fillStyle = '#0d0d1a';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // grid lines
+      ctx.strokeStyle = 'rgba(15,52,96,0.4)';
+      ctx.lineWidth = 0.5;
+      for (let x = 0; x <= COLS; x++) {
+        ctx.beginPath(); ctx.moveTo(x*CELL,0); ctx.lineTo(x*CELL,400); ctx.stroke();
+      }
+      for (let y = 0; y <= ROWS; y++) {
+        ctx.beginPath(); ctx.moveTo(0,y*CELL); ctx.lineTo(400,y*CELL); ctx.stroke();
+      }
+
+      // food (blinking)
+      if (food && (state !== 'playing' || foodBlink % 4 < 3)) {
+        ctx.fillStyle = '#e94560';
+        ctx.shadowColor = '#e94560';
+        ctx.shadowBlur = 10;
+        ctx.fillRect(food.x*CELL+2, food.y*CELL+2, CELL-4, CELL-4);
+        ctx.shadowBlur = 0;
+      }
+
+      // snake body
+      snake.forEach((seg, i) => {
+        if (i === 0) {
+          ctx.fillStyle = '#e0f7fa';
+          ctx.shadowColor = '#a8dadc';
+          ctx.shadowBlur = 8;
+        } else {
+          const t = 1 - i / snake.length;
+          ctx.fillStyle = `hsl(185, 60%, ${20 + t*30}%)`;
+          ctx.shadowBlur = 0;
+        }
+        const pad = i === 0 ? 1 : 2;
+        ctx.fillRect(seg.x*CELL+pad, seg.y*CELL+pad, CELL-pad*2, CELL-pad*2);
+      });
+      ctx.shadowBlur = 0;
+
+      // overlays
+      if (state === 'idle') {
+        drawOverlay('SNAKE', 'PRESS ANY KEY');
+      } else if (state === 'dead') {
+        drawOverlay('GAME OVER', `SCORE: ${score}  |  PRESS ANY KEY`);
+      }
+    }
+
+    function drawOverlay(title, sub) {
+      ctx.fillStyle = 'rgba(10,10,26,0.78)';
+      ctx.fillRect(0, 0, 400, 400);
+
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#e94560';
+      ctx.shadowColor = '#e94560';
+      ctx.shadowBlur = 18;
+      ctx.font = "bold 20px 'Press Start 2P', monospace";
+      ctx.fillText(title, 200, 175);
+
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = '#a8dadc';
+      ctx.font = "9px 'Press Start 2P', monospace";
+      ctx.fillText(sub, 200, 215);
+      ctx.textAlign = 'left';
+    }
+
+    document.addEventListener('keydown', e => {
+      const d = DIRS[e.key] || DIRS[e.key.toLowerCase()];
+      if (d) {
+        e.preventDefault();
+        // prevent 180° reversal
+        if (d.x !== -dir.x || d.y !== -dir.y) nextDir = d;
+      }
+      if (state === 'idle' || state === 'dead') {
+        init();
+        start();
+      }
+    });
+
+    canvas.addEventListener('click', () => {
+      if (state === 'idle' || state === 'dead') { init(); start(); }
+    });
+
+    init();
+  </script>
+</body>
+</html>
